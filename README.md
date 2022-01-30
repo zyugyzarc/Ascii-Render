@@ -12,6 +12,6 @@ A 3d rasterizer that runs on the terminal.
 
 ## Example footage
 
-https://user-images.githubusercontent.com/67181111/141269015-6be6a34d-1930-4dcb-ab13-555c601d2b04.mp4
+![](https://raw.githubusercontent.com/zyugyzarc/Ascii-Render/main/.github/color_example.mp4)
 
-https://user-images.githubusercontent.com/67181111/141268813-df641fa1-4fa6-47bf-987e-463bdfc4e828.mp4
+![](https://raw.githubusercontent.com/zyugyzarc/Ascii-Render/main/.github/suzane_mouse.mp4)
