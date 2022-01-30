@@ -6,7 +6,7 @@ from libc.stdio cimport printf
 from libc.math cimport sin, cos
 from time import perf_counter as time, sleep
 
-#import pyautogui as pg # to get mouse position
+if "DISPLAY" in os.environ: import pyautogui as pg # to get mouse position
 
 cdef int FPS = 12;
 cdef int COLOR = 1; # BOOL : ENUM(0, 1)
@@ -445,6 +445,12 @@ cpdef main():
         t = time()
         
         m.rot.y += 1/FPS * 0.5
+
+        # for mouse controls
+        #p = pg.position()
+        #m.rot.x = -p[1]/100
+        #m.rot.y = -p[0]/100
+
         m.render()
     
         t = time()-t
