@@ -3,7 +3,7 @@
 import os, sys
 from libc.stdlib cimport calloc, free #, system
 from libc.stdio cimport printf
-from libc.math cimport sin, cos
+from libc.math cimport sin, cos, sqrt
 from time import perf_counter as time, sleep
 
 if "DISPLAY" in os.environ: import pyautogui as pg # to get mouse position
@@ -250,21 +250,41 @@ cdef int color_char(ivec& c):
 
     return m
 
+cdef void norm( vec& v , float s = 1):
+    cdef float m = sqrt( v.x * v.x + v.y * v.y + v.z * v.z )
+    v.x = v.x /m *s
+    v.y = v.y /m *s
+    v.z = v.z /m *s
+
 clear()
 
 
 #cpdef class Mesh:
 cdef class Mesh:
-    cdef vec points[512];
-    cdef vec normals[1024];
-    cdef ivec faces[1024];
-    cdef int fmat[1024];
-    cdef int nmap[1024];
 
-    cdef vec vbuf[512];
-    cdef float dbuf[1024];
-    cdef int dbuf_idx[1024];
+    #cdef vec points[512];
+    #cdef vec normals[1024];
+    #cdef ivec faces[1024];
+    #cdef int fmat[1024];
+    #cdef int nmap[1024];
 
+    #cdef vec vbuf[512];
+    #cdef float dbuf[1024];
+    #cdef int dbuf_idx[1024];
+
+    #for large models
+    cdef vec points[2048];
+    cdef vec normals[4096];
+    cdef ivec faces[4096];
+    cdef int fmat[4096];
+    cdef int nmap[4096];
+
+    cdef vec vbuf[2048];
+    cdef float dbuf[4096];
+    cdef int dbuf_idx[4096];
+    
+
+    cdef ivec pallete[16];
     cdef int vcount
     cdef int fcount
 
@@ -322,7 +342,7 @@ cdef class Mesh:
 
         cdef int j, k
         cdef vec n
-        cdef vec l = vec(3, 5, 5)
+        cdef vec l
         cdef float lum
         cdef ivec col
         clear()
@@ -331,22 +351,24 @@ cdef class Mesh:
             
             k = self.dbuf_idx[j]
             n = self.normals[ self.nmap[k] ]
-            l = vec(3, 5, 5)
+            l = vec(7, -7, 5)
+            norm(l, 5)
             
             self.apply_transform(n)
-            self.apply_transform(l)
+            #self.apply_transform(l)
 
             lum = ( n.x * l.x + n.y * l.y + n.z * l.z )
+            lum = lum * lum / 2 + 3
             lum = lum if lum > 0 else 0
-            c = self.chars[<int>(lum*lum/2)]
+            lum = lum if lum < 36 else 36
+            c = self.chars[<int>lum]
 
             # Draw face
             
-            if self.fmat[k] == 1:
-                col.x, col.y, col.z = 255, 255, 255
+            # get color from materials (mtl file) 
+            col = self.pallete[ self.fmat[k] ]
+            color_char( col )
 
-            elif self.fmat[k] == 2:
-                col.x, col.y, col.z = 255, 64, 64
 
             triangle(
                 ivec( <int>self.vbuf[ self.faces[k].x ].x, <int>self.vbuf[ self.faces[k].x ].y, 0),
@@ -393,49 +415,78 @@ cdef class Mesh:
         for i from 0<=i<37 by 1: self.chars[i] = ".:`\'-,;~_!\"?c\\^<>|=sr1Jo*(C)utia3zLvey75jST{lx}IfY]qp9n0G62Vk8UXhZ4bgdPEKA$wQm&#HDR@WNBM"[i]
 
         cdef int _pi = 0, _fi = 0, _ni = 0, _mi = 0
-
+        mtlfile = ""
         with open(FILENAME) as f:
             for i_ in f.readlines():
+                try:
+                    if i_.startswith('vn'):
+                        data = i_[3:].strip().replace(' ',',')
+                        #_normals.append( eval(data) )
+                        x, y, z = eval(data)
+                        self.normals[_ni] = vec(<float>x, <float>y, <float>z)
+                        _ni += 1
 
-                if i_.startswith('vn'):
-                    data = i_[3:].strip().replace(' ',',')
-                    #_normals.append( eval(data) )
-                    x, y, z = eval(data)
-                    self.normals[_ni] = vec(<float>x, <float>y, <float>z)
-                    _ni += 1
-
-                elif i_.startswith('v'):
-                    data = i_[2:].strip().replace(' ',',')
-                    #_points.append( eval(data) )
-                    x, y, z = eval(data)
-                    self.points[_pi] = vec(<float>x, <float>y, <float>z)
-                    _pi += 1
+                    if i_.startswith("vt"):
+                        pass
+    
+                    elif i_.startswith('v'):
+                        data = i_[2:].strip().replace(' ',',')
+                        #_points.append( eval(data) )
+                        x, y, z = eval(data)
+                        self.points[_pi] = vec(<float>x, <float>y, <float>z)
+                        _pi += 1
     
 
-                elif i_.startswith('f'): 
-                    data = i_[2:].strip().replace(' ',',').replace('/',',').replace(',,',',')
-                    data = [j_-1 for j_ in eval(data)]
-                    #_faces.append( data[::2] )
-                    #_nmap.append(data[1])
+                    elif i_.startswith('f'): 
+                        data = i_[2:].strip().replace(' ',',').replace('/',',').replace(',,',',')
+                        data = [j_-1 for j_ in eval(data)]
+                        #_faces.append( data[::2] )
+                        #_nmap.append(data[1])
 
-                    assert len(data) == 6, RuntimeError("No Normals in OBJ File")
-    
-                    self.nmap[_fi] = data[1]
-                    self.faces[_fi] = ivec( data[0], data[2], data[4] )
-    
-                    self.fmat[_fi] = _mi
-                    _fi += 1
+                        assert len(data) > 3, RuntimeError("No Normals in OBJ File")
+                        
+                        if len(data) == 6: # [ v//n ] * 3
+                            self.nmap[_fi] = data[1]
+                            self.faces[_fi] = ivec( data[0], data[2], data[4] )
+                        if len(data) == 9: # [ v/t/n ] * 3
+                            self.nmap[_fi] = data[2]
+                            self.faces[_fi] = ivec( data[0], data[3], data[6] )
 
-                elif i_.startswith("usemtl"):
-                    data = i_.lstrip("usemtl ")
-                    #materials.append(data)
-                    _mi += 1
+                        self.fmat[_fi] = _mi
+                        _fi += 1
+
+                    elif i_.startswith("mtllib"):
+                        mtlfile = i_.lstrip("mtllib ")
+
+                    elif i_.startswith("usemtl"):
+                        data = i_.lstrip("usemtl ")
+                        _mi += 1
+                        
+                        x, y, z = self.load_mtl( FILENAME, mtlfile, data )
+                        self.pallete[_mi] = ivec(x, y, z)
+
+                except Exception as e:
+                    print( "in ", i_, ",")
+                    raise e
         
 
         self.vcount = <int>_pi
         self.fcount = <int>_fi
 
         printf("loaded model: %d verts, %d tris\n", self.vcount, self.fcount)
+    
+    def load_mtl(self, ofile, file, mat):
+        with open( os.path.join(os.path.dirname(ofile) ,file.strip() ) ) as f:
+            f = f.read()
+        f = f[f.find(mat):]
+        f = f[f.find("Kd"):]
+        f = f[3:f.find("\n")]
+        f = eval(f.replace(' ', ','))
+        r, g, b = f
+        r *= 255; g*= 255; b*= 255
+        return int(r), int(g), int(b)
+
+
 
 cpdef main():
     m = Mesh( sys.argv[1] )
