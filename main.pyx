@@ -37,6 +37,7 @@ cdef void clear():
     for i from 0 <= i < w*h by 1:
         screen[i] = b" "
         color[i] = ivec(255, 255, 255)
+    printf("\x1b[2J")
 
 
 cdef void show():
@@ -357,18 +358,20 @@ cdef class Mesh:
             self.apply_transform(n)
             #self.apply_transform(l)
 
+            # get color from materials (mtl file) 
+            
+            # color transform:
+            # color in (RGB) -> (HSV)
+            # V channel => lum, color (HS V=100%) -> (RGB)
+            col = self.pallete[ self.fmat[k] ]
+
             lum = ( n.x * l.x + n.y * l.y + n.z * l.z )
-            lum = lum * lum / 2 + 3
+            lum = lum * lum * (255 - color_char(col) )/255 + 1
             lum = lum if lum > 0 else 0
             lum = lum if lum < 36 else 36
             c = self.chars[<int>lum]
 
             # Draw face
-            
-            # get color from materials (mtl file) 
-            col = self.pallete[ self.fmat[k] ]
-            color_char( col )
-
 
             triangle(
                 ivec( <int>self.vbuf[ self.faces[k].x ].x, <int>self.vbuf[ self.faces[k].x ].y, 0),
@@ -456,17 +459,17 @@ cdef class Mesh:
                         _fi += 1
 
                     elif i_.startswith("mtllib"):
-                        mtlfile = i_.lstrip("mtllib ")
+                        mtlfile = i_[7:]
 
                     elif i_.startswith("usemtl"):
-                        data = i_.lstrip("usemtl ")
+                        data = i_[6:]
                         _mi += 1
                         
                         x, y, z = self.load_mtl( FILENAME, mtlfile, data )
                         self.pallete[_mi] = ivec(x, y, z)
 
                 except Exception as e:
-                    print( "in ", i_, ",")
+                    print( "in ", i_, ",", "(",FILENAME, mtlfile,")")
                     raise e
         
 
