@@ -15,3 +15,5 @@ A 3d rasterizer that runs on the terminal.
 ![](https://raw.githubusercontent.com/zyugyzarc/Ascii-Render/main/.github/color_example.gif)
 
 ![](https://raw.githubusercontent.com/zyugyzarc/Ascii-Render/main/.github/suzane_mouse.gif)
+
+![](https://raw.githubusercontent.com/zyugyzarc/Ascii-Render/main/.github/mario.gif)
