@@ -245,9 +245,9 @@ cdef int color_char(ivec& c):
     m = ( c.x if c.x > c.y else c.y )
     m = ( m    if m    > c.z else c.z )
 
-    c.x = <int> ( 255/m * c.x )
-    c.y = <int> ( 255/m * c.y )
-    c.z = <int> ( 255/m * c.z )
+    c.x = <int> ( 200/m * c.x ) + <int>(m * 50/255 * c.x/255)
+    c.y = <int> ( 200/m * c.y ) + <int>(m * 50/255 * c.y/255)
+    c.z = <int> ( 200/m * c.z ) + <int>(m * 50/255 * c.z/255)
 
     return m
 
