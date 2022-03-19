@@ -5,6 +5,7 @@ from libc.stdlib cimport calloc, free #, system
 from libc.stdio cimport printf
 from libc.math cimport sin, cos, sqrt
 from time import perf_counter as time, sleep
+import cython
 
 if "DISPLAY" in os.environ: import pyautogui as pg # to get mouse position
 
@@ -32,12 +33,32 @@ printf("\nsize: %d x %d\n", w, h)
 cdef char* screen = <char*> calloc( w*h, sizeof(char) );
 cdef ivec* color = <ivec*> calloc( w*h, sizeof(ivec) );
 
+cdef void norm( vec& v , float s = 1):
+    cdef float m = sqrt( v.x * v.x + v.y * v.y + v.z * v.z )
+    v.x = v.x /m *s
+    v.y = v.y /m *s
+    v.z = v.z /m *s
+
+cdef float mag( vec v ):
+    return sqrt( v.x * v.x + v.y * v.y + v.z * v.z )
+
+cdef float dist( vec a, vec b):
+    cdef vec v = vec(a.x-b.x, a.y-b.y, a.z-b.z )
+    return sqrt( v.x * v.x + v.y * v.y + v.z * v.z )
+
+cdef ivec to_ivec( vec v ):
+    return ivec(<int>v.x, <int>v.y, <int>v.z)
+
+cdef vec to_vec( ivec v ):
+    return vec(v.x, v.y, v.z)
+
 cdef void clear():
+
     cdef int i;
     for i from 0 <= i < w*h by 1:
         screen[i] = b" "
         color[i] = ivec(255, 255, 255)
-    printf("\x1b[2J")
+    printf("\x1b[H\x1b[2J")
 
 
 cdef void show():
@@ -55,10 +76,12 @@ cdef void show():
     printf('\n')
 
 cdef void point(ivec p, char c, ivec col):
-    if 0 < p.y*w + p.x and p.y*w + p.x < h*w:
-        screen[p.y*w + p.x] = c
-        color[ p.y*w + p.x] = col
+    if col.x > 0:
+        if 0 < p.y*w + p.x and p.y*w + p.x < h*w:
+            screen[p.y*w + p.x] = c
+            color[ p.y*w + p.x] = col
 
+#@cython.cdivision(True)
 cdef void line(ivec p1, ivec p2, char ch, ivec col):
     
     cdef float m, c
@@ -91,58 +114,65 @@ cdef void line(ivec p1, ivec p2, char ch, ivec col):
             for i from p2.y < i < p1.y by 1:
                 point( ivec( <int>(i*m+c), i, 0), ch, col)
 
-cdef void _flat_bot_tri(ivec p1, ivec p2, ivec p3, char c, ivec col):
-
-    if p2.y != p3.y: printf("NOT FLAT BOTTOM TRIANGLE"); return
-    if p1.y == p2.y: line(p1, p2, c, col) ; line(p2, p3, c, col); return
+#@cython.cdivision(True)
+cdef ivec interpolate_tex(ivec p, ivec p1, ivec p2, ivec p3):
 
     cdef float m1, c1, m2, c2
-    cdef int i, j
+    
+    #point( p, b"*", ivec(255, 128, 0) )
+    #point( p1, b"1", ivec(255, 128, 0) )
+    #point( p2, b"2", ivec(255, 128, 0) )
+    #point( p3, b"3", ivec(255, 128, 0) )
+    
+    cdef float s, t
 
-    m1 = (p2.x-p1.x)/(p2.y-p1.y)
-    c1 = p1.x - m1 * p1.y
+    if p.x == p3.x:
+        return ivec(0, 0, 0)
 
-    m2 = (p3.x - p1.x)/(p3.y - p1.y)
-    c2 = p1.x - m2 * p1.y
-
-    for i from p1.y <= i <= p2.y by 1:
-        if (i*m1+c1) < (i*m2+c2):
-            for j from <int>(i*m1+c1) <= j <= <int>(i*m2+c2) by 1:
-                point( ivec(j, i, 0), c, col)
-        else:
-            for j from <int>(i*m2+c2) <= j <= <int>(i*m1+c1) by 1:
-                point( ivec(j, i, 0), c, col)
-
-cdef void _flat_top_tri(ivec p1, ivec p2, ivec p3, char c, ivec col):
-
-    if p2.y != p1.y: printf("NOT FLAT TOP TRIANGLE"); return
-    if p2.y == p3.y: line( p1, p2, c, col ) ; line( p2, p3, c, col ); return
-
-    cdef float m1, c1, m2, c2
-    cdef int i, j
-
-    m1 = (p1.x - p3.x)/(p1.y - p3.y)
-    c1 = p3.x - m1 * p3.y
-
-    m2 = (p3.x - p2.x)/(p3.y - p2.y)
-    c2 = p3.x - m2* p3.y
-
-    for i from p1.y <= i <= p3.y by 1:
-        if (i*m1+c1) < (i*m2+c2):
-            for j from <int>(i*m1+c1) <= j <= <int>(i*m2+c2) by 1:
-                point( ivec(j, i, 0), c, col)
-        else:
-            for j from <int>(i*m2+c2) <= j <= <int>(i*m1+c1) by 1:
-                point( ivec(j, i, 0), c, col)
+    if p2.x == p1.x:
+        return ivec(0, 0, 0)
 
 
+    m1 = (p2.y-p1.y)/(p2.x-p1.x)
+    c1 = p1.y - m1 * p1.x
+
+    m2 = (p3.y - p.y)/(p3.x - p.x)
+    c2 = p.y - m2 * p.x
+    
+    if m1 == m2:
+        return ivec(0, 0, 0)
+
+    cdef vec q
+    q.x = (c2 - c1)/(m1 - m2)
+    q.y = (q.x*m2 + c2) 
+    
+    if dist(q, to_vec(p3) ) == 0 or dist( to_vec(p1) , to_vec(p2) ) == 0:
+        return ivec(0, 0, 0)
+
+
+    s = dist( to_vec(p1) , q) / dist( to_vec(p1) , to_vec(p2) )
+    t = dist(q, to_vec(p) ) / dist(q, to_vec(p3) )
+    
+    #point( ivec(<int>q.x, <int>q.y, 0), b"%", ivec(255, 255, 0) )
+    
+    #printf("<%d, %d, 255>\n", s*255, t*255)
+    return ivec( <int>(s*255), <int>(t*255), 255 )
+
+    #clear()
+    #return ivec(0, 0, 255)
+
+#@cython.cdivision(True)
 cdef void triangle(ivec p1, ivec p2, ivec p3, char ch, ivec col):
 
     cdef int[3] xi = [p1.x, p2.x, p3.x]
     cdef int[3] yi = [p1.y, p2.y, p3.y]
-
+    cdef ivec p4
     cdef float m, c
     cdef int i, j = 0
+    cdef int tex = 0
+
+    if col.x < 0:
+        tex = 1
 
     for j from 1<= j < 3 by 1:
         for i from 1<= i < 3 by 1:
@@ -152,20 +182,65 @@ cdef void triangle(ivec p1, ivec p2, ivec p3, char ch, ivec col):
 
     p1.x, p2.x, p3.x = xi[0], xi[1], xi[2]
     p1.y, p2.y, p3.y = yi[0], yi[1], yi[2]
-    cdef int x4
-
-    if   p1.y == p2.y: _flat_top_tri(p1, p2, p3, ch, col)
-    elif p2.y == p3.y: _flat_bot_tri(p1, p2, p3, ch, col)
     
+    cdef float m1, c1, m2, c2
+    
+    if p1.y == p3.y:
+        line(p1, p2, ch, col)
+        line(p1, p3, ch, col)
     else:
         m = (p1.x - p3.x)/(p1.y - p3.y)
         c = p3.x - m * p3.y
 
-        x4 = <int>(m * p2.y + c)
+        p4.x = <int>(m * p2.y + c)
+        p4.y = p2.y
 
-        _flat_bot_tri(p1, p2, ivec(x4, p2.y, 0), ch, col)
-        _flat_top_tri(p2, ivec(x4, p2.y, 0), p3, ch, col)
+        if p1.y == p2.y:
+            line(p1, p2, ch, col)
+        else:
+            # draw flat bottom triangle : p1 | p2 -- p4
+            m1 = (p1.x - p2.x)/(p1.y - p2.y)
+            c1 = p1.x - m1*p1.y
 
+            m2 = (p1.x - p4.x)/(p1.y - p4.y)
+            c2 = p1.x - m2*p1.y
+
+            for i from p1.y <= i <= p2.y by 1:
+                for j from <int>(i*m1+c1) <= j <= <int>(i*m2+c2) by 1:
+                    if tex:
+                        col = interpolate_tex( ivec(j, i, 0), p1, p2, p3)
+                        #printf("<%d, %d, %d>  ", col.x, col.y, col.z)
+                    point( ivec(j, i, 0), ch, col)
+
+                for j from <int>(i*m2+c2) <= j <= <int>(i*m1+c1) by 1:
+                    if tex:
+                        col = interpolate_tex( ivec(j, i, 0), p1, p2, p3)
+                        #printf("<%d, %d, %d>  ", col.x, col.y, col.z)
+                    point( ivec(j, i, 0), ch, col)
+
+        if p2.y == p3.y:
+            line(p2, p3, ch, col)
+        else:
+            # draw flat top tiangle : p2 -- p4 | p3
+            m1 = (p3.x - p2.x)/(p3.y - p2.y)
+            c1 = p3.x - m1*p3.y
+
+            m2 = (p3.x - p4.x)/(p3.y - p4.y)
+            c2 = p3.x - m2*p3.y
+
+            for i from p2.y <= i <= p3.y by 1:
+                for j from <int>(i*m1+c1) <= j <= <int>(i*m2+c2) by 1:
+                    if tex:
+                        col = interpolate_tex( ivec(j, i, 0), p1, p2, p3)
+                        #printf("<%d, %d, %d>  ", col.x, col.y, col.z)
+                    point( ivec(j, i, 0), ch, col)
+
+                for j from <int>(i*m2+c2) <= j <= <int>(i*m1+c1) by 1:
+                    if tex:
+                        col = interpolate_tex( ivec(j, i, 0), p1, p2, p3)
+                        #printf("<%d, %d, %d>  ", col.x, col.y, col.z)
+                    point( ivec(j, i, 0), ch, col)
+        printf('\n')
 
 cdef void quad(ivec p1, ivec p2, ivec p3, ivec p4, char c, ivec col):
     triangle(p1, p2, p3, c, col)
@@ -240,10 +315,13 @@ cdef vec project_point(vec& p, float sx, float sy):
 
 
 cdef int color_char(ivec& c):
+    
+    if c.x < 0:
+        return 10
 
     cdef int m
     m = ( c.x if c.x > c.y else c.y )
-    m = ( m    if m    > c.z else c.z )
+    m = ( m   if m   > c.z else c.z )
 
     c.x = <int> ( 200/m * c.x ) + <int>(m * 50/255 * c.x/255)
     c.y = <int> ( 200/m * c.y ) + <int>(m * 50/255 * c.y/255)
@@ -251,13 +329,8 @@ cdef int color_char(ivec& c):
 
     return m
 
-cdef void norm( vec& v , float s = 1):
-    cdef float m = sqrt( v.x * v.x + v.y * v.y + v.z * v.z )
-    v.x = v.x /m *s
-    v.y = v.y /m *s
-    v.z = v.z /m *s
 
-clear()
+#clear()
 
 
 #cpdef class Mesh:
@@ -310,11 +383,8 @@ cdef class Mesh:
         for j from 0<= j < self.vcount by 1:
 
             p = self.points[j]
-
             self.apply_transform(p)
-            
             project_point(p, l, l/2)
-
             self.vbuf[j] = p
 
     cdef void order_depth(self):
@@ -342,11 +412,10 @@ cdef class Mesh:
         self.order_depth()
 
         cdef int j, k
-        cdef vec n
-        cdef vec l
+        cdef vec n, l
         cdef float lum
         cdef ivec col
-        clear()
+        cdef char c
         
         for j from 0 <= j < self.fcount by 1:
             
@@ -356,7 +425,7 @@ cdef class Mesh:
             norm(l, 5)
             
             self.apply_transform(n)
-            #self.apply_transform(l)
+            self.apply_transform(l)
 
             # get color from materials (mtl file) 
             
@@ -364,6 +433,9 @@ cdef class Mesh:
             # color in (RGB) -> (HSV)
             # V channel => lum, color (HS V=100%) -> (RGB)
             col = self.pallete[ self.fmat[k] ]
+            if self.fmat[k] == 2:
+                #col = ivec(32, 64, 128)
+                col = ivec( -1, 0, 0)
 
             lum = ( n.x * l.x + n.y * l.y + n.z * l.z )
             lum = lum * lum * (255 - color_char(col) )/255 + 1
@@ -384,20 +456,21 @@ cdef class Mesh:
             # Draw Edge
 
             #line(
-            #    ivec( <int>self.vbuf[ self.faces[k].x ].x, <int>self.vbuf[ self.faces[k].x ].y, 0)
-            #    ivec( <int>self.vbuf[ self.faces[k].y ].x, <int>self.vbuf[ self.faces[k].y ].y, 0
+            #    ivec( <int>self.vbuf[ self.faces[k].x ].x, <int>self.vbuf[ self.faces[k].x ].y, 0),
+            #    ivec( <int>self.vbuf[ self.faces[k].y ].x, <int>self.vbuf[ self.faces[k].y ].y, 0),
             #    b'#', ivec( 0, 255, 255 )
             #)
             #line(
-            #    ivec( <int>self.vbuf[ self.faces[k].y ].x, <int>self.vbuf[ self.faces[k].y ].y, 0)
-            #    ivec( <int>self.vbuf[ self.faces[k].z ].x, <int>self.vbuf[ self.faces[k].z ].y, 0
+            #    ivec( <int>self.vbuf[ self.faces[k].y ].x, <int>self.vbuf[ self.faces[k].y ].y, 0),
+            #    ivec( <int>self.vbuf[ self.faces[k].z ].x, <int>self.vbuf[ self.faces[k].z ].y, 0),
             #    b'#', ivec( 0, 255, 255 )
             #)
             #line(
-            #    ivec( <int>self.vbuf[ self.faces[k].x ].x, <int>self.vbuf[ self.faces[k].x ].y, 0)
-            #    ivec( <int>self.vbuf[ self.faces[k].z ].x, <int>self.vbuf[ self.faces[k].z ].y, 0
+            #    ivec( <int>self.vbuf[ self.faces[k].x ].x, <int>self.vbuf[ self.faces[k].x ].y, 0),
+            #    ivec( <int>self.vbuf[ self.faces[k].z ].x, <int>self.vbuf[ self.faces[k].z ].y, 0),
             #    b'#', ivec( 0, 255, 255 )
-            #)               
+            #)
+
             # Draw Vertex
             
             #col = ivec(0, 255, 255)
@@ -504,7 +577,8 @@ cpdef main():
         #p = pg.position()
         #m.rot.x = -p[1]/100
         #m.rot.y = -p[0]/100
-
+        
+        clear()
         m.render()
     
         t = time()-t
