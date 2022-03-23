@@ -27,6 +27,9 @@ cdef struct ivec:
 
 cdef int w = <int>(os.get_terminal_size()[0])
 cdef int h = <int>(os.get_terminal_size()[1])
+cdef int TEXSIZE = 8
+
+cdef ivec* tex_buffer = <ivec*> calloc( TEXSIZE*TEXSIZE *2, sizeof(ivec) )
 
 printf("\nsize: %d x %d\n", w, h)
 
@@ -58,7 +61,7 @@ cdef void clear():
     for i from 0 <= i < w*h by 1:
         screen[i] = b" "
         color[i] = ivec(255, 255, 255)
-    printf("\x1b[H\x1b[2J")
+    #printf("\x1b[H\x1b[2J")
 
 
 cdef void show():
@@ -76,7 +79,7 @@ cdef void show():
     printf('\n')
 
 cdef void point(ivec p, char c, ivec col):
-    if col.x > 0:
+    if col.x >= 0:
         if 0 < p.y*w + p.x and p.y*w + p.x < h*w:
             screen[p.y*w + p.x] = c
             color[ p.y*w + p.x] = col
@@ -115,73 +118,96 @@ cdef void line(ivec p1, ivec p2, char ch, ivec col):
                 point( ivec( <int>(i*m+c), i, 0), ch, col)
 
 #@cython.cdivision(True)
-cdef ivec interpolate_tex(ivec p, ivec p1, ivec p2, ivec p3):
-
-    cdef float m1, c1, m2, c2
-    
-    #point( p, b"*", ivec(255, 128, 0) )
-    #point( p1, b"1", ivec(255, 128, 0) )
-    #point( p2, b"2", ivec(255, 128, 0) )
-    #point( p3, b"3", ivec(255, 128, 0) )
-    
-    cdef float s, t
-
-    if p.x == p3.x:
-        return ivec(0, 0, 0)
-
-    if p2.x == p1.x:
-        return ivec(0, 0, 0)
-
-
-    m1 = (p2.y-p1.y)/(p2.x-p1.x)
-    c1 = p1.y - m1 * p1.x
-
-    m2 = (p3.y - p.y)/(p3.x - p.x)
-    c2 = p.y - m2 * p.x
-    
-    if m1 == m2:
-        return ivec(0, 0, 0)
+cdef vec interpolate_tex(ivec p, ivec p1, ivec p2, ivec p3):
 
     cdef vec q
-    q.x = (c2 - c1)/(m1 - m2)
-    q.y = (q.x*m2 + c2) 
-    
-    if dist(q, to_vec(p3) ) == 0 or dist( to_vec(p1) , to_vec(p2) ) == 0:
-        return ivec(0, 0, 0)
+    q.x = ( (p2.y - p3.y) * (p.x - p3.x) + (p3.x - p2.x) * (p.y - p3.y) )/( (p2.y - p3.y) * (p1.x - p3.x) + (p3.x - p2.x) * (p1.y - p3.y) )
+    q.y = ( (p3.y - p1.y) * (p.x - p3.x) + (p1.x - p3.x) * (p.y - p3.y) )/( (p2.y - p3.y) * (p1.x - p3.x) + (p3.x - p2.x) * (p1.y - p3.y) )
+    q.z = 1 - q.x - q.y
 
+    q.x = ((q.x if q.x < 1 else 1) if q.x > 0 else 0)
+    q.y = ((q.y if q.y < 1 else 1) if q.y > 0 else 0)
+    q.z = ((q.z if q.z < 1 else 1) if q.z > 0 else 0)
+    #printf("q<%d %d %d>", q.x, q.y ,q.z)
+    return q
 
-    s = dist( to_vec(p1) , q) / dist( to_vec(p1) , to_vec(p2) )
-    t = dist(q, to_vec(p) ) / dist(q, to_vec(p3) )
-    
-    #point( ivec(<int>q.x, <int>q.y, 0), b"%", ivec(255, 255, 0) )
-    
-    #printf("<%d, %d, 255>\n", s*255, t*255)
-    return ivec( <int>(s*255), <int>(t*255), 255 )
+cdef ivec interpolate(vec p, vec t1, vec t2, vec t3, int tex_id, float z1, float z2, float z3):
 
-    #clear()
-    #return ivec(0, 0, 255)
+    cdef ivec p_, t_
+    cdef vec m, t, d1, d2, d3
+    cdef int i
+
+    if tex_id == 2:  # Raw tex-interpolated channel
+    
+        p_ = ivec( <int>(255*p.x), <int>(255*p.y), <int>(255*p.z) )
+        return p_
+        
+    
+    elif tex_id == 1:
+        
+        m.x = (t1.x + t2.x + t3.x)/ 3
+        m.y = (t1.y + t2.y + t3.y)/ 3
+
+        t.x  = (t1.x - m.x)*p.x/z1 + m.y
+        t.y  = (t1.y - m.y)*p.x/z1 + m.y
+
+        t.x += (t2.x - m.x)*p.y/z2 + m.y
+        t.y += (t2.y - m.y)*p.y/z2 + m.y
+
+        t.x += (t3.x - m.x)*p.z/z3 + m.y
+        t.y += (t3.y - m.y)*p.z/z3 + m.y
+        
+        #printf("t <%f %f> :", t.x, t.y)
+
+        t.x = ((t.x if t.x < 1 else 1) if t.x > 0 else 0)
+        t.y = ((t.y if t.y < 1 else 1) if t.y > 0 else 0)
+
+        t_.x = <int>(t.x * (TEXSIZE-1))
+        t_.y = <int>(t.y * (TEXSIZE-1))
+
+        #printf(" <%d %d> :", t_.x, t_.y)
+
+        i = t_.y * TEXSIZE + t_.x
+        
+        #printf(" %d\n", i)
+
+        #if i > 4:
+        #    printf("(%f %f)(%f %f)(%f %f) <- [%f %f] : %d\n", t1.x, t1.y, t2.x, t2.y, t3.x, t3.y, t.x, t.y, i)
+
+        if i < TEXSIZE*TEXSIZE:
+            return tex_buffer[ i ]
+        else:
+            return ivec(255, 0, 255)
+
+    
+    #return ivec(<int>(p_.x * 255) , <int>(p_.y * 255), 255)
+    #return ivec( <int>p_.x, <int>p_.y, <int>p_.z )
+    
 
 #@cython.cdivision(True)
-cdef void triangle(ivec p1, ivec p2, ivec p3, char ch, ivec col):
+cdef void triangle(ivec p1, ivec p2, ivec p3, vec t1, vec t2, vec t3, char ch, ivec col, float z1, float z2, float z3):
 
     cdef int[3] xi = [p1.x, p2.x, p3.x]
     cdef int[3] yi = [p1.y, p2.y, p3.y]
+    cdef vec[3] ti = [t1, t2, t3]
     cdef ivec p4
     cdef float m, c
     cdef int i, j = 0
     cdef int tex = 0
 
     if col.x < 0:
-        tex = 1
+        tex = -col.x
 
     for j from 1<= j < 3 by 1:
         for i from 1<= i < 3 by 1:
             if yi[i-1] > yi[i]:
                 yi[i-1], yi[i] = yi[i], yi[i-1]
                 xi[i-1], xi[i] = xi[i], xi[i-1]
+                ti[i-1], ti[i] = ti[i], ti[i-1]
 
     p1.x, p2.x, p3.x = xi[0], xi[1], xi[2]
     p1.y, p2.y, p3.y = yi[0], yi[1], yi[2]
+    t1, t2, t3 = ti[0], ti[1], ti[2]
     
     cdef float m1, c1, m2, c2
     
@@ -208,13 +234,21 @@ cdef void triangle(ivec p1, ivec p2, ivec p3, char ch, ivec col):
             for i from p1.y <= i <= p2.y by 1:
                 for j from <int>(i*m1+c1) <= j <= <int>(i*m2+c2) by 1:
                     if tex:
-                        col = interpolate_tex( ivec(j, i, 0), p1, p2, p3)
+                        col = interpolate(
+                                interpolate_tex( ivec(j, i, 0), p1, p2, p3), 
+                                t1, t2, t3, tex,
+                                z1, z2, z3
+                            )
                         #printf("<%d, %d, %d>  ", col.x, col.y, col.z)
                     point( ivec(j, i, 0), ch, col)
 
                 for j from <int>(i*m2+c2) <= j <= <int>(i*m1+c1) by 1:
                     if tex:
-                        col = interpolate_tex( ivec(j, i, 0), p1, p2, p3)
+                        col = interpolate(
+                                interpolate_tex( ivec(j, i, 0), p1, p2, p3),
+                                t1, t2, t3, tex,
+                                z1, z2, z3
+                            )
                         #printf("<%d, %d, %d>  ", col.x, col.y, col.z)
                     point( ivec(j, i, 0), ch, col)
 
@@ -231,20 +265,28 @@ cdef void triangle(ivec p1, ivec p2, ivec p3, char ch, ivec col):
             for i from p2.y <= i <= p3.y by 1:
                 for j from <int>(i*m1+c1) <= j <= <int>(i*m2+c2) by 1:
                     if tex:
-                        col = interpolate_tex( ivec(j, i, 0), p1, p2, p3)
+                        col = interpolate(
+                                interpolate_tex( ivec(j, i, 0), p1, p2, p3),
+                                t1, t2, t3, tex,
+                                z1, z2, z3
+                            )
                         #printf("<%d, %d, %d>  ", col.x, col.y, col.z)
                     point( ivec(j, i, 0), ch, col)
 
                 for j from <int>(i*m2+c2) <= j <= <int>(i*m1+c1) by 1:
                     if tex:
-                        col = interpolate_tex( ivec(j, i, 0), p1, p2, p3)
+                        col = interpolate(
+                                interpolate_tex( ivec(j, i, 0), p1, p2, p3),
+                                t1, t2, t3, tex,
+                                z1, z2, z3
+                            )
                         #printf("<%d, %d, %d>  ", col.x, col.y, col.z)
                     point( ivec(j, i, 0), ch, col)
         printf('\n')
 
-cdef void quad(ivec p1, ivec p2, ivec p3, ivec p4, char c, ivec col):
-    triangle(p1, p2, p3, c, col)
-    triangle(p2, p3, p4, c, col)
+#cdef void quad(ivec p1, ivec p2, ivec p3, ivec p4, char c, ivec col):
+#    triangle(p1, p2, p3, c, col)
+#    triangle(p2, p3, p4, c, col)
 
 
 cdef float deg(float x): return 180 * x / 3.14159
@@ -338,9 +380,11 @@ cdef class Mesh:
 
     #cdef vec points[512];
     #cdef vec normals[1024];
+    #cdef vec texels[1024];
     #cdef ivec faces[1024];
     #cdef int fmat[1024];
     #cdef int nmap[1024];
+    #cdef int tmap[1024]
 
     #cdef vec vbuf[512];
     #cdef float dbuf[1024];
@@ -349,9 +393,11 @@ cdef class Mesh:
     #for large models
     cdef vec points[2048];
     cdef vec normals[4096];
+    cdef vec texels[4096];
     cdef ivec faces[4096];
     cdef int fmat[4096];
     cdef int nmap[4096];
+    cdef int tmap[4069]
 
     cdef vec vbuf[2048];
     cdef float dbuf[4096];
@@ -449,8 +495,11 @@ cdef class Mesh:
                 ivec( <int>self.vbuf[ self.faces[k].x ].x, <int>self.vbuf[ self.faces[k].x ].y, 0),
                 ivec( <int>self.vbuf[ self.faces[k].y ].x, <int>self.vbuf[ self.faces[k].y ].y, 0),
                 ivec( <int>self.vbuf[ self.faces[k].z ].x, <int>self.vbuf[ self.faces[k].z ].y, 0),
-                #b'.'
-                c, col
+                self.texels [self.faces[k].x ], self.texels[ self.faces[k].y ], self.texels[ self.faces[k].z ],
+                c, col,
+                self.vbuf[ self.faces[k].x ].z,
+                self.vbuf[ self.faces[k].y ].z,
+                self.vbuf[ self.faces[k].z ].z,
             )
 
             # Draw Edge
@@ -490,7 +539,7 @@ cdef class Mesh:
         cdef int i
         for i from 0<=i<37 by 1: self.chars[i] = ".:`\'-,;~_!\"?c\\^<>|=sr1Jo*(C)utia3zLvey75jST{lx}IfY]qp9n0G62Vk8UXhZ4bgdPEKA$wQm&#HDR@WNBM"[i]
 
-        cdef int _pi = 0, _fi = 0, _ni = 0, _mi = 0
+        cdef int _pi = 0, _fi = 0, _ni = 0, _mi = 0, _ti = 0, _texi = 0
         mtlfile = ""
         with open(FILENAME) as f:
             for i_ in f.readlines():
@@ -502,8 +551,12 @@ cdef class Mesh:
                         self.normals[_ni] = vec(<float>x, <float>y, <float>z)
                         _ni += 1
 
-                    if i_.startswith("vt"):
-                        pass
+                    elif i_.startswith('vt'):
+                        data = i_[3:].strip().replace(' ',',')
+                        #_points.append( eval(data) )
+                        x, y = eval(data)
+                        self.texels[_ti] = vec(<float>x, <float>y, 0)
+                        _ti += 1
     
                     elif i_.startswith('v'):
                         data = i_[2:].strip().replace(' ',',')
@@ -538,7 +591,7 @@ cdef class Mesh:
                         data = i_[6:]
                         _mi += 1
                         
-                        x, y, z = self.load_mtl( FILENAME, mtlfile, data )
+                        x, y, z, _texi = self.load_mtl( FILENAME, mtlfile, data, _texi)
                         self.pallete[_mi] = ivec(x, y, z)
 
                 except Exception as e:
@@ -551,16 +604,39 @@ cdef class Mesh:
 
         printf("loaded model: %d verts, %d tris\n", self.vcount, self.fcount)
     
-    def load_mtl(self, ofile, file, mat):
+    def load_mtl(self, ofile, file, mat, texid):
+        
         with open( os.path.join(os.path.dirname(ofile) ,file.strip() ) ) as f:
             f = f.read()
+        
         f = f[f.find(mat):]
         f = f[f.find("Kd"):]
         f = f[3:f.find("\n")]
         f = eval(f.replace(' ', ','))
         r, g, b = f
         r *= 255; g*= 255; b*= 255
-        return int(r), int(g), int(b)
+
+        with open( os.path.join(os.path.dirname(ofile) ,file.strip() ) ) as f:
+            f = f.read()
+        
+        f = f[f.find(mat):]
+        f = f[f.find("map_Kd"):]
+        f = f[7:f.find("\n")]
+
+        if not f: return int(r), int(g), int(b), texid
+        
+        
+        import numpy as np
+        from PIL import Image
+
+        print(repr(f))
+        f = np.array( Image.open( os.path.join(os.path.dirname(ofile) , f ) ) )
+        
+        for i in range( f.shape[0] ):
+            for j in range( f.shape[1] ):
+                tex_buffer[texid*TEXSIZE*TEXSIZE + j*TEXSIZE + i] = ivec( f[i, j, 0], f[i, j, 1], f[i, j, 2] )
+        
+        return int(r), int(g), int(b), texid+1
 
 
 
