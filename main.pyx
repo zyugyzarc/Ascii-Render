@@ -121,6 +121,9 @@ cdef void line(ivec p1, ivec p2, char ch, ivec col):
 cdef vec interpolate_tex(ivec p, ivec p1, ivec p2, ivec p3):
 
     cdef vec q
+    if  (p2.y - p3.y) * (p1.x - p3.x) + (p3.x - p2.x) * (p1.y - p3.y) == 0:
+        return vec(0, 0, 0)
+
     q.x = ( (p2.y - p3.y) * (p.x - p3.x) + (p3.x - p2.x) * (p.y - p3.y) )/( (p2.y - p3.y) * (p1.x - p3.x) + (p3.x - p2.x) * (p1.y - p3.y) )
     q.y = ( (p3.y - p1.y) * (p.x - p3.x) + (p1.x - p3.x) * (p.y - p3.y) )/( (p2.y - p3.y) * (p1.x - p3.x) + (p3.x - p2.x) * (p1.y - p3.y) )
     q.z = 1 - q.x - q.y
@@ -136,6 +139,7 @@ cdef ivec interpolate(vec p, vec t1, vec t2, vec t3, int tex_id, float z1, float
     cdef ivec p_, t_
     cdef vec m, t, d1, d2, d3
     cdef int i
+    cdef int s = 20
 
     if tex_id == 2:  # Raw tex-interpolated channel
     
@@ -144,34 +148,23 @@ cdef ivec interpolate(vec p, vec t1, vec t2, vec t3, int tex_id, float z1, float
         
     
     elif tex_id == 1:
+
+        t.x  = t1.x * p.x + t2.x * p.y + t3.x * p.z
+        t.y  = t1.y * p.x + t2.y * p.y + t3.y * p.z
+
+        #t.x = ((t.x if t.x < 1 else 1) if t.x > 0 else 0)
+        #t.y = ((t.y if t.y < 1 else 1) if t.y > 0 else 0)
+
+        t_.x = <int> ((t.x * 255))#(TEXSIZE))
+        t_.y = <int> ((t.y * 255))#(TEXSIZE))
+
+        #return ivec( t_.x, t_.y, 255 )
         
-        m.x = (t1.x + t2.x + t3.x)/ 3
-        m.y = (t1.y + t2.y + t3.y)/ 3
-
-        t.x  = (t1.x - m.x)*p.x/z1 + m.y
-        t.y  = (t1.y - m.y)*p.x/z1 + m.y
-
-        t.x += (t2.x - m.x)*p.y/z2 + m.y
-        t.y += (t2.y - m.y)*p.y/z2 + m.y
-
-        t.x += (t3.x - m.x)*p.z/z3 + m.y
-        t.y += (t3.y - m.y)*p.z/z3 + m.y
+        i = <int>(t_.y/255*64) + <int>(t_.x/255*8)
         
-        #printf("t <%f %f> :", t.x, t.y)
+        #printf(" %d | ", i)
 
-        t.x = ((t.x if t.x < 1 else 1) if t.x > 0 else 0)
-        t.y = ((t.y if t.y < 1 else 1) if t.y > 0 else 0)
-
-        t_.x = <int>(t.x * (TEXSIZE-1))
-        t_.y = <int>(t.y * (TEXSIZE-1))
-
-        #printf(" <%d %d> :", t_.x, t_.y)
-
-        i = t_.y * TEXSIZE + t_.x
-        
-        #printf(" %d\n", i)
-
-        #if i > 4:
+        #if i > 30:
         #    printf("(%f %f)(%f %f)(%f %f) <- [%f %f] : %d\n", t1.x, t1.y, t2.x, t2.y, t3.x, t3.y, t.x, t.y, i)
 
         if i < TEXSIZE*TEXSIZE:
