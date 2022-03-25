@@ -1,7 +1,6 @@
 # Ascii-Render
 A 3d rasterizer that runs on the terminal.
 
-
 ## Installation / Usage
 - clone the repo: `$ git clone https://github.com/zyugyzarc/Ascii-Render.git`
 - install cython `$ pip3 install cython`
@@ -9,8 +8,11 @@ A 3d rasterizer that runs on the terminal.
   - `$ cythonize main.pyx -3 --inplace && rm -rf build main.c`
   or run `python3 compile.py [obj file]`
 * the framerate can be set using the `FPS` env variable
+* color can be disabled by setting the `NOCOLOR` env variable to any value
 
 ## Example footage
+
+![](https://raw.githubusercontent.com/zyugyzarc/Ascii-Render/main/.github/textured.gif)
 
 ![](https://raw.githubusercontent.com/zyugyzarc/Ascii-Render/main/.github/color_example.gif)
 
