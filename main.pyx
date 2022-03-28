@@ -171,13 +171,14 @@ cdef ivec interpolate(vec p, vec t1, vec t2, vec t3, int tex_id, float z1, float
         if 0 <= i < TEXSIZE*TEXSIZE:
             return tex_buffer[ (tex_id-1) * TEXSIZE * TEXSIZE +  i ]
         else:
-            return tex_buffer[ (tex_id-1) * TEXSIZE * TEXSIZE +  0 ]
-            return ivec(255, 0, 255) # for debugging
+            return ivec(-1, 0, 0) # dont render the area
+            #return tex_buffer[ (tex_id) * TEXSIZE * TEXSIZE - 1 ]
+            #return ivec(255, 0, 255) # for debugging
 
     
 
 #@cython.cdivision(True)
-cdef void triangle(ivec p1, ivec p2, ivec p3, vec t1, vec t2, vec t3, char ch, ivec col, float z1, float z2, float z3):
+cdef void triangle(ivec p1, ivec p2, ivec p3, vec t1, vec t2, vec t3, float lum, ivec col, float z1, float z2, float z3):
 
     cdef int[3] xi = [p1.x, p2.x, p3.x]
     cdef int[3] yi = [p1.y, p2.y, p3.y]
@@ -186,6 +187,14 @@ cdef void triangle(ivec p1, ivec p2, ivec p3, vec t1, vec t2, vec t3, char ch, i
     cdef float m, c
     cdef int i, j = 0
     cdef int tex = 0
+    cdef char* chars = ".:`\'-,;~_!\"?c\\^<>|=sr1Jo*(C)utia3zLvey75jST{lx}IfY]qp9n0G62Vk8UXhZ4bgdPEKA$wQm&#HDR@WNBM"
+    cdef int clen = 88//2
+    cdef char ch = chars[<int>lum]
+
+    cdef float col_sc = 0.2
+    
+    cdef float l = 1
+    lum *= 2
 
     if col.x < 0:
         tex = -col.x
@@ -225,22 +234,28 @@ cdef void triangle(ivec p1, ivec p2, ivec p3, vec t1, vec t2, vec t3, char ch, i
 
             for i from p1.y <= i <= p2.y by 1:
                 for j from <int>(i*m1+c1) <= j <= <int>(i*m2+c2) by 1:
+                    l = 1
                     if tex:
                         col = interpolate(
                                 interpolate_tex( ivec(j, i, 0), p1, p2, p3), 
                                 t1, t2, t3, tex,
                                 z1, z2, z3
                             )
-                    point( ivec(j, i, 0), ch, col)
+                        l = color_char(col, col_sc)/255
+                    l = (lum * l) * clen
+                    point( ivec(j, i, 0), chars[<int>l], col)
 
                 for j from <int>(i*m2+c2) <= j <= <int>(i*m1+c1) by 1:
+                    l = 1
                     if tex:
                         col = interpolate(
                                 interpolate_tex( ivec(j, i, 0), p1, p2, p3),
                                 t1, t2, t3, tex,
                                 z1, z2, z3
                             )
-                    point( ivec(j, i, 0), ch, col)
+                        l = color_char(col, col_sc)/255
+                    l = (lum * l) * clen
+                    point( ivec(j, i, 0), chars[<int>l], col)
 
         if p2.y == p3.y:
             line(p2, p3, ch, col)
@@ -254,23 +269,28 @@ cdef void triangle(ivec p1, ivec p2, ivec p3, vec t1, vec t2, vec t3, char ch, i
 
             for i from p2.y <= i <= p3.y by 1:
                 for j from <int>(i*m1+c1) <= j <= <int>(i*m2+c2) by 1:
+                    l = 1
                     if tex:
                         col = interpolate(
                                 interpolate_tex( ivec(j, i, 0), p1, p2, p3),
                                 t1, t2, t3, tex,
                                 z1, z2, z3
                             )
-                    point( ivec(j, i, 0), ch, col)
+                        l = color_char(col, col_sc)/255
+                    l = (lum * l) * clen
+                    point( ivec(j, i, 0), chars[<int>l], col)
 
                 for j from <int>(i*m2+c2) <= j <= <int>(i*m1+c1) by 1:
+                    l = 1
                     if tex:
                         col = interpolate(
                                 interpolate_tex( ivec(j, i, 0), p1, p2, p3),
                                 t1, t2, t3, tex,
                                 z1, z2, z3
                             )
-                    point( ivec(j, i, 0), ch, col)
-        #printf('\n')
+                        l = color_char(col, col_sc)/255
+                    l = (lum * l) * clen
+                    point( ivec(j, i, 0), chars[<int>l], col)
 
 #cdef void quad(ivec p1, ivec p2, ivec p3, ivec p4, char c, ivec col):
 #    triangle(p1, p2, p3, c, col)
@@ -344,7 +364,7 @@ cdef vec project_point(vec& p, float sx, float sy):
 
 
 
-cdef int color_char(ivec& c):
+cdef int color_char(ivec& c, float scale = 1):
     
     if c.x < 0:
         return 10
@@ -352,10 +372,10 @@ cdef int color_char(ivec& c):
     cdef int m
     m = ( c.x if c.x > c.y else c.y )
     m = ( m   if m   > c.z else c.z )
-
-    c.x = <int> ( 200/m * c.x ) + <int>(m * 50/255 * c.x/255)
-    c.y = <int> ( 200/m * c.y ) + <int>(m * 50/255 * c.y/255)
-    c.z = <int> ( 200/m * c.z ) + <int>(m * 50/255 * c.z/255)
+    
+    c.x = <int>( ( 200/m * c.x * scale) + (m * 50/255 * c.x/255 * scale) + c.x * (1-scale) )
+    c.y = <int>( ( 200/m * c.y * scale) + (m * 50/255 * c.y/255 * scale) + c.y * (1-scale) )
+    c.z = <int>( ( 200/m * c.z * scale) + (m * 50/255 * c.z/255 * scale) + c.z * (1-scale) )
 
     return m
 
@@ -457,11 +477,10 @@ cdef class Mesh:
             k = self.dbuf_idx[j]
             n = self.normals[ self.nmap[k] ]
             l = vec(7, -7, 5)
-            norm(l, 5)
             
             self.apply_transform(n)
             self.apply_transform(l)
-
+            norm(l, 1)
             # get color from materials (mtl file) 
             
             # color transform:
@@ -471,12 +490,14 @@ cdef class Mesh:
 
             if self.ftex[ self.fmat[k] ]:
                 col = ivec( -self.fmat[k], 0, 0)
-
+            
             lum = ( n.x * l.x + n.y * l.y + n.z * l.z )
-            lum = lum * lum * (255 - color_char(col) )/255 + 1
+            lum = lum * color_char(col)/255 + 1
             lum = lum if lum > 0 else 0
-            lum = lum if lum < 36 else 36
-            c = self.chars[<int>lum]
+
+            printf("tri lum -> %f\n", lum)
+            #lum = lum if lum < 36 else 36
+            #c = self.chars[<int>lum]
 
             # Draw face
             
@@ -487,7 +508,7 @@ cdef class Mesh:
                 ivec( <int>self.vbuf[ self.faces[k].y ].x, <int>self.vbuf[ self.faces[k].y ].y, 0),
                 ivec( <int>self.vbuf[ self.faces[k].z ].x, <int>self.vbuf[ self.faces[k].z ].y, 0),
                 self.texels[self.tmap[k].x], self.texels[self.tmap[k].y], self.texels[self.tmap[k].z],
-                c, col,
+                lum, col,
                 self.vbuf[ self.faces[k].x ].z,
                 self.vbuf[ self.faces[k].y ].z,
                 self.vbuf[ self.faces[k].z ].z,
@@ -527,8 +548,8 @@ cdef class Mesh:
     #Load OBJ File (python)
     def __init__(self, FILENAME):
         
-        cdef int i
-        for i from 0<=i<37 by 1: self.chars[i] = ".:`\'-,;~_!\"?c\\^<>|=sr1Jo*(C)utia3zLvey75jST{lx}IfY]qp9n0G62Vk8UXhZ4bgdPEKA$wQm&#HDR@WNBM"[i]
+        cdef int i=0
+        #for i from 0<=i<37 by 1: self.chars[i] = ".:`\'-,;~_!\"?c\\^<>|=sr1Jo*(C)utia3zLvey75jST{lx}IfY]qp9n0G62Vk8UXhZ4bgdPEKA$wQm&#HDR@WNBM"[i]
 
         cdef int _pi = 0, _fi = 0, _ni = 0, _mi = 0, _ti = 0, _texi = 0
         mtlfile = ""
