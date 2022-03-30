@@ -10,6 +10,8 @@ A 3d rasterizer that runs on the terminal.
 * the framerate can be set using the `FPS` env variable
 * color can be disabled by setting the `NOCOLOR` env variable to any value
 
+Note: if your model contains textures, the texture size must be set manually in `main.pyx` at line 31.
+
 ## Example footage
 
 ![](https://raw.githubusercontent.com/zyugyzarc/Ascii-Render/main/.github/textured.gif)
