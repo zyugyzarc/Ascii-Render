@@ -20,4 +20,6 @@ Note: if your model contains textures, the texture size must be set manually in 
 
 ![](https://raw.githubusercontent.com/zyugyzarc/Ascii-Render/main/.github/suzane_mouse.gif)
 
+![](https://raw.githubusercontent.com/zyugyzarc/Ascii-Render/main/.github/minecraft.gif)
+
 ![](https://raw.githubusercontent.com/zyugyzarc/Ascii-Render/main/.github/mario.gif)
