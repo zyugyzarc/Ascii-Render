@@ -6,9 +6,10 @@ A 3d rasterizer that runs on the terminal.
 - install cython `$ pip3 install cython`
 - compile and run `main.pyx`:
   - `$ cythonize main.pyx -3 --inplace && rm -rf build main.c`
-  or run `python3 compile.py [obj file]`
+  - `$ python3 -c "import main" [path/to/obj/file]`
+  or run `python3 compile.py [path/to/obj/file]`
 * the framerate can be set using the `FPS` env variable
-* color can be disabled by setting the `NOCOLOR` env variable to any value
+* color can be disabled by setting the `NOCOLOR` env variable to any value *[Note: this increases speed]*
 
 Note: if your model contains textures, the texture size must be set manually in `main.pyx` at line 31.
 
@@ -23,3 +24,4 @@ Note: if your model contains textures, the texture size must be set manually in 
 ![](https://raw.githubusercontent.com/zyugyzarc/Ascii-Render/main/.github/minecraft.gif)
 
 ![](https://raw.githubusercontent.com/zyugyzarc/Ascii-Render/main/.github/mario.gif)
+
