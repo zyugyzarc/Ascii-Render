@@ -6,15 +6,16 @@ from libc.stdio cimport printf
 from libc.math cimport sin, cos, sqrt
 from libcpp cimport bool
 from time import perf_counter as time, sleep
-import cython
 
 if "DISPLAY" in os.environ: import pyautogui as pg # to get mouse position
 
 cdef int FPS = 12;
 cdef int COLOR = 1; # BOOL : ENUM(0, 1)
+cdef int ASPECT = 1;
 
 if os.environ.get("FPS"):     FPS = <int>int(os.environ["FPS"])
 if os.environ.get("NOCOLOR"): COLOR = 0
+if os.environ.get("ASPECT"): ASPECT = <int>int(os.environ["ASPECT"])
 
 cdef struct vec:
     float x
@@ -26,8 +27,8 @@ cdef struct ivec:
     int y
     int z
 
-cdef int w = <int>(os.get_terminal_size()[0])
-cdef int h = <int>(os.get_terminal_size()[1])
+cdef int w = <int>((os.get_terminal_size()[0])/ASPECT)
+cdef int h = <int>(os.get_terminal_size()[1] - 1)
 cdef int TEXSIZE = 160
 
 cdef ivec* tex_buffer = <ivec*> calloc( TEXSIZE*TEXSIZE *3, sizeof(ivec) )
@@ -66,22 +67,31 @@ cdef void clear():
 
 
 cdef void show():
-    cdef int i;
+    cdef int i, j;
     for i from 0 <= i < w*h by 1:
         if COLOR==1 and ( color[i].x != 255 or color[i].y != 255 or color[i].z != 255 ):
-            printf("\x1b[38;2;%d;%d;%dm%c\x1b[0m",
+            printf("\x1b[38;2;%d;%d;%dm",
                 color[i].x,
                 color[i].y,
-                color[i].z,
-                screen[i]
+                color[i].z
             )
+
+            for j from 0 <= j < ASPECT:
+                printf("%c", screen[i])
+            printf("\x1b[0m")
+
         else:
-            printf("%c", screen[i])
+            for j from 0 <= j < ASPECT:
+                printf("%c", screen[i])
+
+        if i%w == 0:
+            printf("\n")
+
     printf('\n')
 
 cdef void point(ivec p, char c, ivec col):
     if col.x >= 0:
-        if 0 < p.y*w + p.x and p.y*w + p.x < h*w:
+        if 0 < p.y and 0 < p.x and p.y < h and p.x < w:
             screen[p.y*w + p.x] = c
             color[ p.y*w + p.x] = col
 
@@ -129,9 +139,9 @@ cdef vec interpolate_tex(ivec p, ivec p1, ivec p2, ivec p3):
     q.y = ( (p3.y - p1.y) * (p.x - p3.x) + (p1.x - p3.x) * (p.y - p3.y) )/( (p2.y - p3.y) * (p1.x - p3.x) + (p3.x - p2.x) * (p1.y - p3.y) )
     q.z = 1 - q.x - q.y
 
-    q.x = ((q.x if q.x < 1 else 1) if q.x > 0 else 0)
-    q.y = ((q.y if q.y < 1 else 1) if q.y > 0 else 0)
-    q.z = ((q.z if q.z < 1 else 1) if q.z > 0 else 0)
+    q.x = ((q.x if q.x < 1 else 0.99) if q.x > 0 else 0.01)
+    q.y = ((q.y if q.y < 1 else 0.99) if q.y > 0 else 0.01)
+    q.z = ((q.z if q.z < 1 else 0.99) if q.z > 0 else 0.01)
     #printf("q<%d %d %d>", q.x, q.y ,q.z)
     return q
 
@@ -191,7 +201,7 @@ cdef void triangle(ivec p1, ivec p2, ivec p3, vec t1, vec t2, vec t3, float lum,
     cdef int clen = 88//2
     cdef char ch = chars[<int>lum]
 
-    cdef float col_sc = 0.2
+    cdef float col_sc = 0.5
     
     cdef float l = 1
     lum *= 2
@@ -242,7 +252,8 @@ cdef void triangle(ivec p1, ivec p2, ivec p3, vec t1, vec t2, vec t3, float lum,
                                 z1, z2, z3
                             )
                         l = color_char(col, col_sc)/255
-                    l = (lum * l) * clen
+                    l = (lum * l)
+                    l = l * clen
                     point( ivec(j, i, 0), chars[<int>l], col)
 
                 for j from <int>(i*m2+c2) <= j <= <int>(i*m1+c1) by 1:
@@ -254,7 +265,8 @@ cdef void triangle(ivec p1, ivec p2, ivec p3, vec t1, vec t2, vec t3, float lum,
                                 z1, z2, z3
                             )
                         l = color_char(col, col_sc)/255
-                    l = (lum * l) * clen
+                    l = (lum * l)
+                    l = l * clen
                     point( ivec(j, i, 0), chars[<int>l], col)
 
         if p2.y == p3.y:
@@ -277,7 +289,8 @@ cdef void triangle(ivec p1, ivec p2, ivec p3, vec t1, vec t2, vec t3, float lum,
                                 z1, z2, z3
                             )
                         l = color_char(col, col_sc)/255
-                    l = (lum * l) * clen
+                    l = (lum * l)
+                    l = l * clen
                     point( ivec(j, i, 0), chars[<int>l], col)
 
                 for j from <int>(i*m2+c2) <= j <= <int>(i*m1+c1) by 1:
@@ -289,7 +302,8 @@ cdef void triangle(ivec p1, ivec p2, ivec p3, vec t1, vec t2, vec t3, float lum,
                                 z1, z2, z3
                             )
                         l = color_char(col, col_sc)/255
-                    l = (lum * l) * clen
+                    l = (lum * l)
+                    l = l * clen
                     point( ivec(j, i, 0), chars[<int>l], col)
 
 #cdef void quad(ivec p1, ivec p2, ivec p3, ivec p4, char c, ivec col):
@@ -318,7 +332,7 @@ cdef void mat_mul(float* m1, int a1, int b1, float* m2, int a2, int b2, float* m
                 s = s + m1[i*b1+k] * m2[j+k*b2]
             m3[i*b2+j] = s
 
-cdef void rotate_point(vec& p_, vec r):
+cdef void rotate_point(vec& p_, vec r, bool reverse = False):
     
     cdef float p[3]
     p[0], p[1], p[2] = p_.x, p_.y, p_.z
@@ -342,22 +356,28 @@ cdef void rotate_point(vec& p_, vec r):
 
     cdef float P1[3]
     cdef float P2[3]
+    
+    if not reverse:
+        mat_mul(Rx, 3, 3, p , 3, 1, P1)
+        mat_mul(Ry, 3, 3, P1, 3, 1, P2)
+        mat_mul(Rz, 3, 3, P2, 3, 1, p )
+    else:
+        mat_mul(Rz, 3, 3, p , 3, 1, P1)
+        mat_mul(Ry, 3, 3, P1, 3, 1, P2)
+        mat_mul(Rx, 3, 3, P2, 3, 1, p )
 
-    mat_mul(Rx, 3, 3, p , 3, 1, P1)
-    mat_mul(Ry, 3, 3, P1, 3, 1, P2)
-    mat_mul(Rz, 3, 3, P2, 3, 1, p )
 
     p_.x, p_.y, p_.z = p[0], p[1], p[2]
 
-cdef void move_point(vec& p, float x, float y, float z):
-    p.x += x
-    p.y += y
-    p.z += z
+cdef void move_point(vec& p, vec q):
+    p.x += q.x
+    p.y += q.y
+    p.z += q.z
 
 cdef vec project_point(vec& p, float sx, float sy):
 
     cdef float distance = 5.0
-    cdef float z = 1/(distance - p.z)
+    cdef float z = 1/p.z
     p.x = p.x * z * sx + w/2
     p.y = p.y * z * sy + h/2
     p.z = z
@@ -367,7 +387,7 @@ cdef vec project_point(vec& p, float sx, float sy):
 cdef int color_char(ivec& c, float scale = 1):
     
     if c.x < 0:
-        return 10
+        return 50
 
     cdef int m
     m = ( c.x if c.x > c.y else c.y )
@@ -382,22 +402,25 @@ cdef int color_char(ivec& c, float scale = 1):
 
 #clear()
 
+cdef vec cam_pos = vec(0, 0, 0)
+cdef vec cam_rot = vec(0, 0, 0)
+cdef vec light = vec(5, 5, 0)
 
 #cpdef class Mesh:
 cdef class Mesh:
 
-    cdef vec points[512];
-    cdef vec normals[1024];
-    cdef vec texels[1024];
-    cdef ivec faces[1024];
-    cdef bool ftex[1024];
-    cdef int fmat[1024];
-    cdef int nmap[1024];
-    cdef ivec tmap[1024]
+    cdef vec* points
+    cdef vec* normals;
+    cdef vec* texels;
+    cdef ivec* faces;
+    cdef bool* ftex;
+    cdef int* fmat;
+    cdef int* nmap;
+    cdef ivec* tmap;
 
-    cdef vec vbuf[512];
-    cdef float dbuf[1024];
-    cdef int dbuf_idx[1024];
+    cdef vec* vbuf;
+    cdef float* dbuf;
+    cdef int* dbuf_idx;
 
     #for large models
     #cdef vec points[2048];
@@ -424,8 +447,20 @@ cdef class Mesh:
     
 
     cdef vec apply_transform(self, vec& p):
-        
+
         rotate_point(p, self.rot)
+        move_point(p, self.pos)
+        return self.world_transform(p)
+
+    cdef vec world_transform(self, vec& p):
+
+        cdef vec temp
+        temp.x, temp.y, temp.z = -cam_pos.x, -cam_pos.y, -cam_pos.z
+        move_point(p, temp)
+
+        temp.x, temp.y, temp.z = -cam_rot.x, -cam_rot.y, -cam_rot.z
+        rotate_point(p, temp, reverse=True)
+        
         return p
 
     cdef char chars[37]
@@ -475,11 +510,21 @@ cdef class Mesh:
         for j from 0 <= j < self.fcount by 1:
             
             k = self.dbuf_idx[j]
+
+            if (    (self.vbuf[ self.faces[k].x ].x < 0 or self.vbuf[ self.faces[k].x ].x > w)\
+                 or (self.vbuf[ self.faces[k].x ].y < 0 or self.vbuf[ self.faces[k].x ].y > h) )\
+               and( (self.vbuf[ self.faces[k].y ].x < 0 or self.vbuf[ self.faces[k].y ].x > w)\
+                 or (self.vbuf[ self.faces[k].y ].y < 0 or self.vbuf[ self.faces[k].y ].y > h) )\
+               and( (self.vbuf[ self.faces[k].z ].x < 0 or self.vbuf[ self.faces[k].z ].x > w)\
+                 or (self.vbuf[ self.faces[k].z ].y < 0 or self.vbuf[ self.faces[k].z ].y > h) ):
+                   #printf("skipped %d\n", j)
+                   continue # occlusion cull
+
             n = self.normals[ self.nmap[k] ]
-            l = vec(7, -7, 5)
+            l = light
             
             self.apply_transform(n)
-            self.apply_transform(l)
+            self.world_transform(l)
             norm(l, 1)
             # get color from materials (mtl file) 
             
@@ -492,16 +537,16 @@ cdef class Mesh:
                 col = ivec( -self.fmat[k], 0, 0)
             
             lum = ( n.x * l.x + n.y * l.y + n.z * l.z )
-            lum = lum * color_char(col)/255 + 1
+            lum = lum * color_char(col)/255 
             lum = lum if lum > 0 else 0
 
-            printf("tri lum -> %f\n", lum)
             #lum = lum if lum < 36 else 36
             #c = self.chars[<int>lum]
 
             # Draw face
             
             #printf("(%d %d %d)\n", self.tmap[k].x, self.tmap[k].y, self.tmap[k].z,)
+
 
             triangle(
                 ivec( <int>self.vbuf[ self.faces[k].x ].x, <int>self.vbuf[ self.faces[k].x ].y, 0),
@@ -535,21 +580,45 @@ cdef class Mesh:
             # Draw Vertex
             
             #col = ivec(0, 255, 255)
-            #point( ivec( <int>self.vbuf[self.faces[k].x].x, <int>self.vbuf[self.faces[k].x].y, 0 ), b'@', col )
-            #point( ivec( <int>self.vbuf[self.faces[k].y].x, <int>self.vbuf[self.faces[k].y].y, 0 ), b'@', col ); col = ivec(0, 192, 255)
-            #point( ivec( <int>self.vbuf[self.faces[k].z].x, <int>self.vbuf[self.faces[k].z].y, 0 ), b'@', col )
+            #point( ivec( <int>self.vbuf[self.faces[k].x].x, <int>self.vbuf[self.faces[k].x].y, 0 ), b'A', col )
+            #point( ivec( <int>self.vbuf[self.faces[k].y].x, <int>self.vbuf[self.faces[k].y].y, 0 ), b'B', col )
+            #point( ivec( <int>self.vbuf[self.faces[k].z].x, <int>self.vbuf[self.faces[k].z].y, 0 ), b'C', col )
 
+        # draw the light
+        cdef vec temp
+        temp.x, temp.y, temp.z = l.x, l.y, l.z
+        project_point(temp, h/2, h/4)
+        point( ivec(
+            <int>temp.x,
+            <int>temp.y,
+            <int>temp.z
+        ), b"#", ivec(0, 255, 255) )
 
-        show()
+        #show()
 
         self.i += 1
         
 
     #Load OBJ File (python)
-    def __init__(self, FILENAME):
+    def __init__(self, FILENAME, _vcount=256):
         
         cdef int i=0
-        #for i from 0<=i<37 by 1: self.chars[i] = ".:`\'-,;~_!\"?c\\^<>|=sr1Jo*(C)utia3zLvey75jST{lx}IfY]qp9n0G62Vk8UXhZ4bgdPEKA$wQm&#HDR@WNBM"[i]
+        cdef int vcount = <int>_vcount
+        cdef int fcount = vcount * 4
+
+        self.points = <vec*> calloc( vcount, sizeof(vec));
+        self.normals = <vec*> calloc( fcount, sizeof(vec));
+        self.texels = <vec*> calloc( fcount, sizeof(vec));
+        self.faces = <ivec*> calloc( fcount, sizeof(ivec));
+        self.ftex = <bool*> calloc( fcount, sizeof(bool));
+        self.fmat = <int*> calloc( fcount, sizeof(int));
+        self.nmap = <int*> calloc( fcount, sizeof(int));
+        self.tmap = <ivec*> calloc( fcount, sizeof(ivec));
+
+        self.vbuf = <vec*> calloc( self.vcount, sizeof(vec));
+        self.dbuf = <float*> calloc( self.fcount, sizeof(float));
+        self.dbuf_idx = <int*> calloc( self.fcount, sizeof(int));
+
 
         cdef int _pi = 0, _fi = 0, _ni = 0, _mi = 0, _ti = 0, _texi = 0
         mtlfile = ""
@@ -616,11 +685,14 @@ cdef class Mesh:
 
         self.vcount = <int>_pi
         self.fcount = <int>_fi
+
+        self.pos = vec(0, 0, 6)
+        self.rot = vec(0, 0, 0)
         
-        printf("ftex: [ ")
-        for i from 0 <= i <= _mi by 1:
-            printf("%d ", self.ftex[i])
-        printf("]\n")
+        #printf("ftex: [ ")
+        #for i from 0 <= i <= _mi by 1:
+        #    printf("%d ", self.ftex[i])
+        #printf("]\n")
 
         printf("loaded model: %d verts, %d tris\n", self.vcount, self.fcount)
         
@@ -653,7 +725,7 @@ cdef class Mesh:
         import numpy as np
         from PIL import Image
 
-        print(repr(f))
+        #print(repr(f))
         f = np.array( Image.open( os.path.join(os.path.dirname(ofile) , f ) ) )
         
         for i in range( f.shape[0] ):
@@ -662,32 +734,40 @@ cdef class Mesh:
         
         return int(r), int(g), int(b), texid+1
 
-
+screen_w, screen_h = pg.size()
 
 cpdef main():
     m = Mesh( sys.argv[1] )
     input('[press enter to continue]')
-    m.rot.x = rad(60)
-    while True:
-        t = time()
-        
-        m.rot.y += 1/FPS * 0.5
+    m.rot.x = rad(90)
+    m.pos.y = 4
+    m.pos.z = 0
 
-        # for mouse controls
-        #p = pg.position()
-        #m.rot.x = -p[1]/100
-        #m.rot.y = -p[0]/100
+    try:
+        while True:
+            t = time()
         
-        clear()
-        m.render()
+            #m.rot.y += 1/FPS * 0.5
     
-        t = time()-t
-        print(f"{t*1_000_000} µs {t*1000:.4f} ms {1/t:.3f} fps")
-        sleep( max( 0, 1/FPS-t ) )
+            # for mouse controls
+            p = pg.position()
+            cam_rot.x =  (p[1]/screen_h - 0.5) * 3.14 * 3
+            cam_rot.y =  (p[0]/screen_w - 0.5) * 3.14 * 3
+            #light.x =  (p[1]/screen_h - 0.5) * 200
+            #light.y =  (p[0]/screen_w - 0.5) * 200
+        
+            clear()
+            m.render()
+            show()
+        
+            t = time()-t
+            print(f"{t*1_000_000:.2f} µs {t*1000:.4f} ms {1/t:.3f} fps")
+            sleep( max( 0, 1/FPS-t ) )
+    
+    finally:
+        free(screen)
+        free(color)
 
-main()
+if len(sys.argv) > 1:
+    main()
 
-
-free(screen)
-free(color)
-#"""

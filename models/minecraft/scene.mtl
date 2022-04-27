@@ -1,7 +1,18 @@
-# Blender MTL File: 'grass.blend'
+# Blender MTL File: 'scene.blend'
 # Material Count: 3
 
-newmtl side
+newmtl dirt
+Ns 225.000000
+Ka 1.000000 1.000000 1.000000
+Kd 0.800000 0.800000 0.800000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd dirt.png
+
+newmtl grass_side
 Ns 225.000000
 Ka 1.000000 1.000000 1.000000
 Kd 0.800000 0.800000 0.800000
@@ -12,19 +23,8 @@ d 1.000000
 illum 2
 map_Kd grass_side.png
 
-newmtl bottom
+newmtl grass_top
 Ns 225.000000
-Ka 1.000000 1.000000 1.000000
-Kd 0.000000 0.085659 0.800000
-Ks 0.500000 0.500000 0.500000
-Ke 0.000000 0.000000 0.000000
-Ni 1.450000
-d 1.000000
-illum 2
-map_Kd dirt.png
-
-newmtl top
-Ns 323.999994
 Ka 1.000000 1.000000 1.000000
 Kd 0.800000 0.800000 0.800000
 Ks 0.500000 0.500000 0.500000
